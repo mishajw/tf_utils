@@ -1,3 +1,3 @@
+"""Helper functions for TensorFlow"""
 
-def test_util():
-    print("test_util used")
+from tf_utils.tf_utils import test_util
