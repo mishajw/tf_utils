@@ -71,7 +71,7 @@ def run(
 
         # Add training summaries to writer if any exist
         if all_summaries is not None:
-            train_writer.add_summary(train_results[-1])
+            train_writer.add_summary(train_results[-1], step)
 
         # If we're on a testing step...
         if step % args.testing_step == 0:
@@ -86,7 +86,7 @@ def run(
 
             # Add testing summaries to writer if any exist
             if all_summaries is not None:
-                test_writer.add_summary(test_results[-1])
+                test_writer.add_summary(test_results[-1], step)
 
             # Call the test callback if it exists
             if test_callback is not None:
