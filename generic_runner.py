@@ -16,7 +16,8 @@ def run(
         model_input,
         model_output,
         train_evaluations=None,
-        test_evaluations=None):
+        test_evaluations=None,
+        test_callback=None):
     """
     Run a generic TensorFlow session
     :param name: the name of the project
@@ -28,6 +29,7 @@ def run(
     :param model_output: the placeholder to feed the output of the model
     :param train_evaluations: what to evaluate when training (will also evaluate summaries)
     :param test_evaluations: what to evaluate when testing (will also evaluate summaries)
+    :param test_callback: function called with the results of the evaluations passed in `test_evaluations`
     """
 
     if train_evaluations is None:
@@ -85,6 +87,10 @@ def run(
             # Add testing summaries to writer if any exist
             if all_summaries is not None:
                 test_writer.add_summary(test_results[-1])
+
+            # Call the test callback if it exists
+            if test_callback is not None:
+                test_callback(*test_results)
 
         # Check if we've run out of steps (never run out of steps if limit is negative)
         if 0 <= args.training_steps < step:
