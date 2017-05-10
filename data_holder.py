@@ -10,29 +10,31 @@ class DataHolder:
 
     @classmethod
     def from_input_output_lists(cls, args, input_list, output_list):
-        return cls(args, list(zip(input_list, output_list)))
+        assert len(input_list) == len(output_list)
+
+        return DataHolder.from_input_output_pairs(args, list(zip(input_list, output_list)))
 
     @classmethod
     def from_input_output_pairs(cls, args, pairs):
-        return cls(args, pairs)
+        return cls(args, lambda i: pairs[i], len(pairs))
 
-    def __init__(self, args, all_data):
+    def __init__(self, args, get_data_fn, data_length):
         """
         Initialise the data holder with a list of all the data
         :param args: the command line arguments for how to handle data
-        :param all_data: a complete list of data available
+        :param get_data_fn: function that takes an index and returns the data at that index
+        :param data_length: the length of the data
         """
 
-        data_length = len(all_data)
+        self.__get_data_fn = get_data_fn
 
         # Cap the data if provided in arguments
         if args.cap_data is not None:
             data_length = min(data_length, args.cap_data)
 
         # Set the training and testing data to be the correct sizes
-        amount_of_training_data = int(float(data_length) * (1 - args.testing_percentage / 100.0))
-        self.__training_data = all_data[:amount_of_training_data]
-        self.__testing_data = all_data[amount_of_training_data:data_length]
+        self.__num_training_data = int(float(data_length) * (1 - args.testing_percentage / 100.0))
+        self.__num_testing_data = data_length - self.__num_training_data
 
         self.__batch_index = 0
 
@@ -44,31 +46,59 @@ class DataHolder:
         """
 
         # If the batch size is bigger than the training data size, return all training data
-        if size > len(self.__training_data):
-            return self.unzip(self.__training_data)
+        if size > self.__num_training_data:
+            return self.__unzip(self.__get_training_data_range(0, self.__num_training_data))
 
-        training_data_left = len(self.__training_data) - self.__batch_index
+        training_data_left = self.__num_training_data - self.__batch_index
 
         # If we haven't got enough space left in the training data for the whole batch, loop around
         if training_data_left < size:
-            batch = self.__training_data[self.__batch_index:] + self.__training_data[:size - training_data_left]
+            batch = \
+                self.__get_training_data_range(self.__batch_index, self.__num_training_data) + \
+                self.__get_training_data_range(0, size - training_data_left)
             self.__batch_index = size - training_data_left
-            return self.unzip(batch)
+            return self.__unzip(batch)
 
         # Otherwise, return the next batch
-        batch = self.__training_data[self.__batch_index:self.__batch_index + size]
+        batch = self.__get_training_data_range(self.__batch_index, self.__batch_index + size)
         self.__batch_index += size
-        return self.unzip(batch)
+        return self.__unzip(batch)
 
     def get_test_data(self):
         """
         Get all testing data
         :return: testing data
         """
-        return self.__testing_data
+        return self.__get_testing_data_range(0, self.__num_testing_data)
+
+    def __get_training_data_range(self, start, end):
+        return self.__get_data_range(self.__get_training_data, start, end)
+
+    def __get_testing_data_range(self, start, end):
+        return self.__get_data_range(self.__get_testing_data, start, end)
+
+    def __get_training_data(self, index):
+        assert index >= 0
+        assert index < self.__num_training_data
+
+        return self.__get_data(index)
+
+    def __get_testing_data(self, index):
+        assert index >= 0
+        assert index < self.__num_testing_data
+
+        return self.__get_data(self.__num_testing_data + index)
+
+    def __get_data(self, index):
+        # TODO: Randomize data deterministically
+        return self.__get_data_fn(index)
 
     @staticmethod
-    def unzip(data):
+    def __get_data_range(get_data_fn, start, end):
+        return [get_data_fn(i) for i in range(start, end)]
+
+    @staticmethod
+    def __unzip(data):
         # return tuple([list(part) for part in zip(*data)])
 
         inputs = []
