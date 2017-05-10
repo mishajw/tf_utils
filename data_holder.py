@@ -1,5 +1,6 @@
 def add_arguments(parser):
     parser.add_argument("--cap_data", type=int, default=None)
+    # TODO: Add cap to training data
     parser.add_argument("--testing_percentage", type=float, default=25)
 
 
@@ -17,6 +18,15 @@ class DataHolder:
     @classmethod
     def from_input_output_pairs(cls, args, pairs):
         return cls(args, lambda i: pairs[i], len(pairs))
+
+    @classmethod
+    def from_file_methods(cls, args, index_to_files_fn, file_to_data_fn, data_length):
+        def get_data_fn(i):
+            input_path, output_path = index_to_files_fn(i)
+            with open(input_path, "r") as input_file, open(output_path, "r") as output_file:
+                return file_to_data_fn(input_file), file_to_data_fn(output_file)
+
+        return cls(args, get_data_fn, data_length)
 
     def __init__(self, args, get_data_fn, data_length):
         """
@@ -69,7 +79,7 @@ class DataHolder:
         Get all testing data
         :return: testing data
         """
-        return self.__get_testing_data_range(0, self.__num_testing_data)
+        return self.__unzip(self.__get_testing_data_range(0, self.__num_testing_data))
 
     def __get_training_data_range(self, start, end):
         return self.__get_data_range(self.__get_training_data, start, end)
@@ -99,13 +109,4 @@ class DataHolder:
 
     @staticmethod
     def __unzip(data):
-        # return tuple([list(part) for part in zip(*data)])
-
-        inputs = []
-        outputs = []
-
-        for i, o in data:
-            inputs.append(i)
-            outputs.append(o)
-
-        return inputs, outputs
+        return tuple([list(part) for part in zip(*data)])
