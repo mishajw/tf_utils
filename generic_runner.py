@@ -1,16 +1,16 @@
-import argparse
 import tensorflow as tf
 from datetime import datetime
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--training_steps", type=int, default=-1)
-parser.add_argument("--testing_step", type=int, default=1000)
-parser.add_argument("--batch_size", type=int, default=256)
+
+def add_arguments(parser):
+    parser.add_argument("--training_steps", type=int, default=-1)
+    parser.add_argument("--testing_step", type=int, default=1000)
+    parser.add_argument("--batch_size", type=int, default=256)
 
 
 def run(
         name,
-        cli_args,
+        args,
         get_batch_fn,
         testing_data,
         model_input,
@@ -21,7 +21,7 @@ def run(
     """
     Run a generic TensorFlow session
     :param name: the name of the project
-    :param cli_args: the command line arguments for specifying how to run
+    :param args: the command line arguments for specifying how to run
     :param get_batch_fn: a function that takes a batch size, and returns a list training data of that length, in the 
     form of a tuple of input and output data
     :param testing_data: the testing data, in the form of a tuple of input and output data
@@ -37,8 +37,6 @@ def run(
 
     if test_evaluations is None:
         test_evaluations = []
-
-    args, _ = parser.parse_known_args(cli_args)
 
     # Set up session
     session = tf.InteractiveSession()
