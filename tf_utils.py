@@ -1,10 +1,6 @@
 import tensorflow as tf
 
 
-def test_util():
-    print("test_util used")
-
-
 def create_generation_comparison_images(input_image, output_image, guess_image):
     """
     Takes the images from a generative model and display them side-by-side
