@@ -46,23 +46,15 @@ def run(
                 args,
                 get_batch_fn,
                 testing_data,
-                model_input,
-                model_output,
-                train_evaluations,
-                test_evaluations,
-                test_callback)))
-
-
-def run_with_train_step(args, name, update_step_fn):
-    """
-    Train a model with a callback for a single update step
-    :param args: the command line arguments specifying how to run
-    :param name: the name of the project
-    :param update_step_fn: the callback run at each update
-    """
-    run_with_update_loop(
-        name,
-        __get_default_update_loop(args, update_step_fn))
+                get_default_train_step(
+                    model_input,
+                    model_output,
+                    train_evaluations),
+                get_default_test_step(
+                    model_input,
+                    model_output,
+                    test_evaluations,
+                    test_callback))))
 
 
 def run_with_update_loop(
@@ -92,6 +84,92 @@ def run_with_update_loop(
     update_loop_fn(session, step, train_writer, test_writer, all_summaries)
 
 
+def run_with_update_step(
+        args,
+        name,
+        update_step_fn):
+
+    """
+    Train a model with an update step called at each training iteration
+    :param args: 
+    :param name: 
+    :param update_step_fn: 
+    """
+    run_with_update_loop(
+        name,
+        __get_default_update_loop(
+            args,
+            update_step_fn))
+
+
+def run_with_test_train_steps(
+        args,
+        name,
+        get_batch_fn,
+        testing_data,
+        train_step_fn,
+        test_step_fn):
+    """
+    Train a model and specify training and testing steps
+    :param args: the command line arguments specifying how to run
+    :param name: the name of the project
+    :param get_batch_fn: function to get a batch of data
+    :param testing_data: all available testing data
+    :param train_step_fn: the training step
+    :param test_step_fn: the testing step
+    """
+
+    update_loop_fn = __get_default_update_loop(
+        args, __get_default_update_step(args, get_batch_fn, testing_data, train_step_fn, test_step_fn))
+
+    run_with_update_loop(
+        name,
+        update_loop_fn)
+
+
+def get_default_train_step(
+        model_input,
+        model_output,
+        evaluations):
+
+    def train_step(session, step, training_input, training_output, summary_writer, all_summaries):
+        # Run training
+        train_results = session.run(evaluations + [all_summaries], {
+            model_input: training_input,
+            model_output: training_output
+        })
+
+        # Add training summaries to writer if any exist
+        if all_summaries is not None:
+            summary_writer.add_summary(train_results[-1], step)
+
+    return train_step
+
+
+def get_default_test_step(
+        model_input,
+        model_output,
+        evaluations,
+        test_callback):
+
+    def test_step(session, step, testing_input, testing_output, summary_writer, all_summaries):
+        # Run model with test data
+        test_results = session.run(evaluations + [all_summaries], {
+            model_input: testing_input,
+            model_output: testing_output
+        })
+
+        # Add testing summaries to writer if any exist
+        if all_summaries is not None:
+            summary_writer.add_summary(test_results[-1], step)
+
+        # Call the test callback if it exists
+        if test_callback is not None:
+            test_callback(*test_results)
+
+    return test_step
+
+
 def __get_default_update_loop(
         args,
         update_step_fn):
@@ -113,43 +191,16 @@ def __get_default_update_step(
         args,
         get_batch_fn,
         testing_data,
-        model_input,
-        model_output,
-        train_evaluations,
-        test_evaluations,
-        test_callback):
+        train_step_fn,
+        test_step_fn):
 
     def update_step(session, step, train_writer, test_writer, all_summaries):
-        # Get current batch for training
-        batch_input, batch_output = get_batch_fn(args.batch_size)
-
-        # Run training
-        train_results = session.run(train_evaluations + [all_summaries], {
-            model_input: batch_input,
-            model_output: batch_output
-        })
-
-        # Add training summaries to writer if any exist
-        if all_summaries is not None:
-            train_writer.add_summary(train_results[-1], step)
+        training_input, training_output = get_batch_fn(args.batch_size)
+        train_step_fn(session, step, training_input, training_output, train_writer, all_summaries)
 
         # If we're on a testing step...
         if step % args.testing_step == 0:
-            # Get test data
-            test_input, test_output = testing_data
-
-            # Run model with test data
-            test_results = session.run(test_evaluations + [all_summaries], {
-                model_input: test_input,
-                model_output: test_output
-            })
-
-            # Add testing summaries to writer if any exist
-            if all_summaries is not None:
-                test_writer.add_summary(test_results[-1], step)
-
-            # Call the test callback if it exists
-            if test_callback is not None:
-                test_callback(*test_results)
+            testing_input, testing_output = testing_data
+            test_step_fn(session, step, testing_input, testing_output, test_writer, all_summaries)
 
     return update_step
