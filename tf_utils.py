@@ -28,3 +28,6 @@ def tensor_summary(t):
     tf.summary.scalar("max", tf.reduce_max(t))
     tf.summary.scalar("min", tf.reduce_min(t))
 
+
+def remove_nans(t):
+    return tf.where(tf.is_nan(t), tf.zeros_like(t), t)
