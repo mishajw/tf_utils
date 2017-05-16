@@ -17,3 +17,14 @@ def create_generation_comparison_images(input_image, output_image, guess_image):
     all_images = tf.maximum(0.0, tf.minimum(255.0, all_images))
 
     return all_images
+
+
+def tensor_summary(t):
+    t_mean = tf.reduce_mean(t)
+    t_stddev = tf.sqrt(tf.reduce_mean(tf.square(tf.subtract(t, t_mean))))
+
+    tf.summary.scalar("mean", t_mean)
+    tf.summary.scalar("stddev", t_stddev)
+    tf.summary.scalar("max", tf.reduce_max(t))
+    tf.summary.scalar("min", tf.reduce_min(t))
+
