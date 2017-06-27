@@ -197,7 +197,7 @@ def __get_default_update_step(
         train_step_fn(session, step, training_input, training_output, train_writer, all_summaries)
 
         # If we're on a testing step...
-        if step % args.testing_step == 0:
+        if testing_data is not None and step % args.testing_step == 0:
             testing_input, testing_output = testing_data
             test_step_fn(session, step, testing_input, testing_output, test_writer, all_summaries)
 
