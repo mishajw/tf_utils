@@ -134,10 +134,9 @@ def get_default_train_step(
 
     def train_step(session, step, training_input, training_output, summary_writer, all_summaries):
         # Run training
-        train_results = session.run(evaluations + [all_summaries], {
-            model_input: training_input,
-            model_output: training_output
-        })
+        train_results = session.run(
+            evaluations + [all_summaries],
+            __get_feed_dict(model_input, model_output, training_input, training_output))
 
         # Add training summaries to writer if any exist
         if all_summaries is not None:
@@ -154,10 +153,9 @@ def get_default_test_step(
 
     def test_step(session, step, testing_input, testing_output, summary_writer, all_summaries):
         # Run model with test data
-        test_results = session.run(evaluations + [all_summaries], {
-            model_input: testing_input,
-            model_output: testing_output
-        })
+        test_results = session.run(
+            evaluations + [all_summaries],
+            __get_feed_dict(model_input, model_output, testing_input, testing_output))
 
         # Add testing summaries to writer if any exist
         if all_summaries is not None:
@@ -204,3 +202,9 @@ def __get_default_update_step(
             test_step_fn(session, step, testing_input, testing_output, test_writer, all_summaries)
 
     return update_step
+
+
+def __get_feed_dict(model_input, model_output, batch_input, batch_output):
+    return dict(
+        ({model_input: batch_input} if model_input is not None else {}),
+        **({model_output: batch_output} if model_output is not None else {}))
