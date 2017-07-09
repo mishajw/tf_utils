@@ -31,3 +31,17 @@ def tensor_summary(t):
 
 def remove_nans(t):
     return tf.where(tf.is_nan(t), tf.zeros_like(t), t)
+
+
+def try_create_scoped_variable(*args, **kwargs):
+    """
+    Create a variable. If it has not been created before, it will be created. If it has, the original will be returned.
+    :param args: the arguments to pass to `tf.get_variable`
+    :param kwargs: the keyword arguments to pass to `tf.get_variable`
+    :return: the variable
+    """
+    try:
+        return tf.get_variable(*args, **kwargs)
+    except ValueError:
+        tf.get_variable_scope().reuse_variables()
+        return tf.get_variable(*args, **kwargs)
