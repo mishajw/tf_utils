@@ -45,3 +45,7 @@ def try_create_scoped_variable(*args, **kwargs):
     except ValueError:
         tf.get_variable_scope().reuse_variables()
         return tf.get_variable(*args, **kwargs)
+
+
+def int_array_from_str(s: str):
+    return [int(i_str.strip()) for i_str in s.split(",")]
