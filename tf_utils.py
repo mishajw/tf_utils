@@ -49,3 +49,9 @@ def try_create_scoped_variable(*args, **kwargs):
 
 def int_array_from_str(s: str):
     return [int(i_str.strip()) for i_str in s.split(",")]
+
+
+def add_all_trainable_summaries():
+    for variable in tf.trainable_variables():
+        with tf.variable_scope(variable.name.replace(":", "_")):
+            tensor_summary(variable)
