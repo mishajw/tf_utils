@@ -1,11 +1,13 @@
-import tensorflow as tf
 from datetime import datetime
+import tensorflow as tf
+import tf_utils
 
 
 def add_arguments(parser):
     parser.add_argument("--training_steps", type=int, default=-1)
     parser.add_argument("--testing_step", type=int, default=1000)
     parser.add_argument("--batch_size", type=int, default=256)
+    parser.add_argument("--add_all_summaries", type=bool, default=False)
 
 
 def run(
@@ -39,6 +41,7 @@ def run(
         test_evaluations = []
 
     run_with_update_loop(
+        args,
         name,
         __get_default_update_loop(
             args,
@@ -58,10 +61,12 @@ def run(
 
 
 def run_with_update_loop(
+        args,
         name,
         update_loop_fn):
     """
     Train a model with a callback for all updates
+    :param args: the command line arguments for specifying how to run
     :param name: the name of the project
     :param update_loop_fn: a function that updates the model continuously
     """
@@ -69,6 +74,10 @@ def run_with_update_loop(
     # Set up session
     session = tf.InteractiveSession()
     tf.global_variables_initializer().run()
+
+    # Add summaries for all trainable variables
+    if args.add_all_summaries:
+        tf_utils.add_all_trainable_summaries()
 
     # Current update iteration
     step = 0
@@ -96,6 +105,7 @@ def run_with_update_step(
     :param update_step_fn: 
     """
     run_with_update_loop(
+        args,
         name,
         __get_default_update_loop(
             args,
@@ -123,6 +133,7 @@ def run_with_test_train_steps(
         args, __get_default_update_step(args, get_batch_fn, testing_data, train_step_fn, test_step_fn))
 
     run_with_update_loop(
+        args,
         name,
         update_loop_fn)
 
