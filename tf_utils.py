@@ -55,3 +55,14 @@ def add_all_trainable_summaries():
     for variable in tf.trainable_variables():
         with tf.variable_scope(variable.name.replace(":", "_")):
             tensor_summary(variable)
+
+
+def resize_tensor_array(tensor_array: tf.TensorArray, new_size: int) -> tf.TensorArray:
+    resized_tensor_array = tf.TensorArray(dtype=tensor_array.dtype, size=new_size)
+
+    _, resized_tensor_array, _ = tf.while_loop(
+        cond=lambda step, *_: step < new_size,
+        body=lambda step, ta1, ta2: (step + 1, ta1.write(step, ta2.read(step)), ta2),
+        loop_vars=[0, resized_tensor_array, tensor_array])
+
+    return resized_tensor_array
