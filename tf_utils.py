@@ -66,3 +66,12 @@ def resize_tensor_array(tensor_array: tf.TensorArray, new_size: int) -> tf.Tenso
         loop_vars=[0, resized_tensor_array, tensor_array])
 
     return resized_tensor_array
+
+
+def format_for_scope(scope_name: str) -> str:
+    illegal_characters = "[]"
+
+    for character in illegal_characters:
+        scope_name = scope_name.replace(character, "_")
+
+    return scope_name
