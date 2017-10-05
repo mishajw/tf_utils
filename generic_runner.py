@@ -174,7 +174,7 @@ def get_default_test_step(
 
         # Call the test callback if it exists
         if test_callback is not None:
-            test_callback(*test_results)
+            test_callback(*test_results, session)
 
     return test_step
 
