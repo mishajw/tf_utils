@@ -1,3 +1,4 @@
+from typing import Callable, List
 import tensorflow as tf
 
 
@@ -75,3 +76,16 @@ def format_for_scope(scope_name: str) -> str:
         scope_name = scope_name.replace(character, "_")
 
     return scope_name
+
+
+def get_fully_connected_layers(
+        initial_input: tf.Tensor, layer_sizes: List[int], activation_fn: Callable[[tf.Tensor], tf.Tensor]) -> tf.Tensor:
+    current_input = initial_input
+
+    for i, layer_size in enumerate(layer_sizes):
+        current_activation_fn = activation_fn if i != len(layer_sizes) - 1 else None
+
+        current_input = tf.contrib.layers.fully_connected(
+            current_input, layer_size, activation_fn=current_activation_fn)
+
+    return current_input
