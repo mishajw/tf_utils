@@ -216,6 +216,12 @@ def __get_default_update_step(
 
 
 def __get_feed_dict(model_input, model_output, batch_input, batch_output):
-    return dict(
-        ({model_input: batch_input} if model_input is not None else {}),
-        **({model_output: batch_output} if model_output is not None else {}))
+    if model_output is not None:
+        return {
+            model_input: batch_input,
+            model_output: batch_output
+        }
+    else:
+        return {
+            model_input: batch_input
+        }
