@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Tuple
 import tensorflow as tf
 import tf_utils
 
@@ -72,25 +73,23 @@ def run_with_update_loop(
     """
 
     # Set up session
-    session = tf.InteractiveSession()
-    tf.global_variables_initializer().run()
+    with tf.Session() as session:
+        tf.global_variables_initializer().run()
 
-    # Add summaries for all trainable variables
-    if args.add_all_summaries:
-        tf_utils.add_all_trainable_summaries()
+        # Add summaries for all trainable variables
+        if args.add_all_summaries:
+            tf_utils.add_all_trainable_summaries()
 
-    # Current update iteration
-    step = 0
+        # Current update iteration
+        step = 0
 
-    # Set up writers
-    time_formatted = datetime.now().strftime("%Y%m%d-%H%M%S")
-    train_writer = tf.summary.FileWriter("/tmp/%s/%s/train" % (name, time_formatted), session.graph)
-    test_writer = tf.summary.FileWriter("/tmp/%s/%s/test" % (name, time_formatted), session.graph)
+        # Set up writers
+        train_writer, test_writer = get_writers(session, name)
 
-    # Add summaries to items to evaluate
-    all_summaries = tf.summary.merge_all()
+        # Add summaries to items to evaluate
+        all_summaries = tf.summary.merge_all()
 
-    update_loop_fn(session, step, train_writer, test_writer, all_summaries)
+        update_loop_fn(session, step, train_writer, test_writer, all_summaries)
 
 
 def run_with_update_step(
@@ -225,3 +224,17 @@ def __get_feed_dict(model_input, model_output, batch_input, batch_output):
         return {
             model_input: batch_input
         }
+
+
+def get_writers(session: tf.Session, name: str) -> Tuple[tf.summary.FileWriter, tf.summary.FileWriter]:
+    """
+    Get the test and train writers for writing summaries
+    :param session: the session being used
+    :param name: the name of the program
+    :return: a tuple where item 1 is the train writer, and item 2 is the test writer
+    """
+    time_formatted = datetime.now().strftime("%Y%m%d-%H%M%S")
+    train_writer = tf.summary.FileWriter("/tmp/%s/%s/train" % (name, time_formatted), session.graph)
+    test_writer = tf.summary.FileWriter("/tmp/%s/%s/test" % (name, time_formatted), session.graph)
+
+    return train_writer, test_writer
