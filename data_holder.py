@@ -97,7 +97,7 @@ class DataHolder:
         assert index >= 0
         assert index < self.__num_testing_data
 
-        return self.__get_data(self.__num_testing_data + index)
+        return self.__get_data(self.__num_training_data + index)
 
     def __get_data(self, index):
         # TODO: Randomize data deterministically
