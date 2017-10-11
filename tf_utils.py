@@ -85,7 +85,14 @@ def get_fully_connected_layers(
     for i, layer_size in enumerate(layer_sizes):
         current_activation_fn = activation_fn if i != len(layer_sizes) - 1 else None
 
-        current_input = tf.contrib.layers.fully_connected(
-            current_input, layer_size, activation_fn=current_activation_fn)
+        with tf.variable_scope("fully_connected_layer%d" % i):
+            weights = try_create_scoped_variable("weights", shape=[current_input.shape[1], layer_size], dtype=tf.float32)
+            biases = try_create_scoped_variable("biases", shape=[layer_size], dtype=tf.float32)
+            logits = tf.add(tf.matmul(current_input, weights), biases)
+
+            if current_activation_fn is not None:
+                current_input = current_activation_fn(logits)
+            else:
+                current_input = logits
 
     return current_input
