@@ -1,4 +1,4 @@
-from typing import Callable, List
+from typing import Callable, List, Optional
 import tensorflow as tf
 
 
@@ -79,7 +79,10 @@ def format_for_scope(scope_name: str) -> str:
 
 
 def get_fully_connected_layers(
-        initial_input: tf.Tensor, layer_sizes: List[int], activation_fn: Callable[[tf.Tensor], tf.Tensor]) -> tf.Tensor:
+        initial_input: tf.Tensor,
+        layer_sizes: List[int],
+        activation_fn: Callable[[tf.Tensor], tf.Tensor],
+        dropout: Optional[float]=None) -> tf.Tensor:
     current_input = initial_input
 
     for i, layer_size in enumerate(layer_sizes):
@@ -94,5 +97,8 @@ def get_fully_connected_layers(
                 current_input = current_activation_fn(logits)
             else:
                 current_input = logits
+
+            if dropout is not None:
+                current_input = tf.nn.dropout(current_input, keep_prob=dropout)
 
     return current_input
