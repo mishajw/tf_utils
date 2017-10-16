@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Tuple
+from typing import Tuple, Optional
 import tensorflow as tf
 import tf_utils
 
@@ -9,6 +9,7 @@ def add_arguments(parser):
     parser.add_argument("--testing_step", type=int, default=1000)
     parser.add_argument("--batch_size", type=int, default=256)
     parser.add_argument("--add_all_summaries", type=bool, default=False)
+    parser.add_argument("--run_tag", type=bool, default=None)
 
 
 def run(
@@ -84,7 +85,7 @@ def run_with_update_loop(
         step = 0
 
         # Set up writers
-        train_writer, test_writer = get_writers(session, name)
+        train_writer, test_writer = get_writers(session, name, args.run_tag)
 
         # Add summaries to items to evaluate
         all_summaries = tf.summary.merge_all()
@@ -226,13 +227,21 @@ def __get_feed_dict(model_input, model_output, batch_input, batch_output):
         }
 
 
-def get_writers(session: tf.Session, name: str) -> Tuple[tf.summary.FileWriter, tf.summary.FileWriter]:
+def get_writers(
+        session: tf.Session,
+        name: str,
+        run_tag: Optional[str]=None) -> Tuple[tf.summary.FileWriter, tf.summary.FileWriter]:
     """
     Get the test and train writers for writing summaries
     :param session: the session being used
     :param name: the name of the program
+    :param run_tag: the tag of the run to be placed in the writer path
     :return: a tuple where item 1 is the train writer, and item 2 is the test writer
     """
+
+    if run_tag is not None:
+        name = "%s/%s" % (name, run_tag)
+
     time_formatted = datetime.now().strftime("%Y%m%d-%H%M%S")
     train_writer = tf.summary.FileWriter("/tmp/%s/%s/train" % (name, time_formatted), session.graph)
     test_writer = tf.summary.FileWriter("/tmp/%s/%s/test" % (name, time_formatted), session.graph)
