@@ -3,6 +3,7 @@ from . import model_saver
 from datetime import datetime
 from typing import Tuple, Optional, Callable, TypeVar, Generic, List, Any
 import itertools
+import os
 import tensorflow as tf
 import tf_utils
 
@@ -184,12 +185,13 @@ class GenericRunner(Generic[BatchType]):
         :return: a tuple where item 1 is the train writer, and item 2 is the test writer
         """
 
-        if run_tag is not None:
-            name = "%s/%s" % (name, run_tag)
-
         time_formatted = datetime.now().strftime("%Y%m%d-%H%M%S")
-        train_writer = tf.summary.FileWriter("/tmp/%s/%s/train" % (name, time_formatted), session.graph)
-        test_writer = tf.summary.FileWriter("/tmp/%s/%s/test" % (name, time_formatted), session.graph)
+        base_path = os.path.join("/tmp", name, time_formatted)
+        if run_tag is not None:
+            base_path = os.path.join(base_path, run_tag)
+
+        train_writer = tf.summary.FileWriter(os.path.join(base_path, "train"), session.graph)
+        test_writer = tf.summary.FileWriter(os.path.join(base_path, "test"), session.graph)
 
         return train_writer, test_writer
 
@@ -199,7 +201,7 @@ class GenericRunner(Generic[BatchType]):
         parser.add_argument("--testing_step", type=int, default=1000)
         parser.add_argument("--batch_size", type=int, default=256)
         parser.add_argument("--add_all_summaries", type=bool, default=False)
-        parser.add_argument("--run_tag", type=bool, default=None)
+        parser.add_argument("--run_tag", type=str, default=None)
 
     @classmethod
     def from_args(cls, args, name: str):
