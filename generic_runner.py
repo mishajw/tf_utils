@@ -1,249 +1,207 @@
+from . import data_holder
+from . import model_saver
 from datetime import datetime
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Callable, TypeVar, Generic, List, Any
+import itertools
 import tensorflow as tf
 import tf_utils
 
 
-def add_arguments(parser):
-    parser.add_argument("--training_steps", type=int, default=-1)
-    parser.add_argument("--testing_step", type=int, default=1000)
-    parser.add_argument("--batch_size", type=int, default=256)
-    parser.add_argument("--add_all_summaries", type=bool, default=False)
-    parser.add_argument("--run_tag", type=bool, default=None)
+BatchType = TypeVar("BatchType")
 
 
-def run(
-        args,
-        name,
-        get_batch_fn,
-        testing_data,
-        model_input,
-        model_output,
-        test_callback,
-        train_evaluations=None,
-        test_evaluations=None):
+class GenericRunner(Generic[BatchType]):
+    def __init__(
+            self,
+            name: str,
+            training_steps: int,
+            testing_step: int,
+            batch_size: int,
+            add_all_summaries: bool,
+            run_tag: str):
 
-    """
-    Train a model with a default training set up
-    :param args: the command line arguments for specifying how to run
-    :param name: the name of the project
-    :param get_batch_fn: a function that takes a batch size, and returns a list training data of that length, in the
-    form of a tuple of input and output data
-    :param testing_data: the testing data, in the form of a tuple of input and output data
-    :param model_input: the placeholder to feed the input of the model
-    :param model_output: the placeholder to feed the output of the model
-    :param train_evaluations: what to evaluate when training (will also evaluate summaries)
-    :param test_evaluations: what to evaluate when testing (will also evaluate summaries)
-    :param test_callback: function called with the results of the evaluations passed in `test_evaluations`
-    """
-    if train_evaluations is None:
-        train_evaluations = []
+        self.__name = name
+        self.__training_steps = training_steps
+        self.__testing_step = testing_step  # TODO: Rename
+        self.__batch_size = batch_size
+        self.__add_all_summaries = add_all_summaries
+        self.__run_tag = run_tag
 
-    if test_evaluations is None:
-        test_evaluations = []
+        # Methods for handling train/test data
+        self.__get_batch_fn = None  # type: Optional[Callable[[int], BatchType]]
+        self.__test_data = None  # type: Optional[BatchType]
+        self.__get_feed_dict_fn = None  # type: Optional[Callable[[BatchType], dict]]
 
-    run_with_update_loop(
-        args,
-        name,
-        __get_default_update_loop(
-            args,
-            __get_default_update_step(
-                args,
-                get_batch_fn,
-                testing_data,
-                get_default_train_step(
-                    model_input,
-                    model_output,
-                    train_evaluations),
-                get_default_test_step(
-                    model_input,
-                    model_output,
-                    test_evaluations,
-                    test_callback))))
+        # Used to save session model for this run
+        self.__model_saver = None  # type: Optional[tf_utils.model_saver.ModelSaver]
 
+        # Writers for summaries
+        self.__train_writer = None  # type: Optional[tf.summary.FileWriter]
+        self.__test_writer = None  # type: Optional[tf.summary.FileWriter]
 
-def run_with_update_loop(
-        args,
-        name,
-        update_loop_fn):
-    """
-    Train a model with a callback for all updates
-    :param args: the command line arguments for specifying how to run
-    :param name: the name of the project
-    :param update_loop_fn: a function that updates the model continuously
-    """
+        # Holds step functions
+        self.__all_steps_fn = self.__default_all_steps
+        self.__step_fn = self.__default_step
+        self.__train_evaluations = None
+        self.__test_evaluations = None
+        self.__test_callback_fn = None
+        self.__train_step_fn = None
+        self.__test_step_fn = None
 
-    # Set up session
-    with tf.Session() as session:
-        tf.global_variables_initializer().run()
+    def set_data(self, get_batch_fn: Callable[[int], BatchType], test_data: BatchType):
+        self.__get_batch_fn = get_batch_fn
+        self.__test_data = test_data
 
-        # Add summaries for all trainable variables
-        if args.add_all_summaries:
-            tf_utils.add_all_trainable_summaries()
+    def set_data_holder(self, _data_holder: data_holder.DataHolder):
+        self.__get_batch_fn = _data_holder.get_batch
+        self.__test_data = _data_holder.get_test_data()
 
-        # Current update iteration
-        step = 0
+    def set_get_feed_dict(self, get_feed_dict_fn: Callable[[BatchType], dict]):
+        self.__get_feed_dict_fn = get_feed_dict_fn
 
-        # Set up writers
-        train_writer, test_writer = get_writers(session, name, args.run_tag)
+    def set_model_input_output(self, model_input: tf.Tensor, model_output: tf.Tensor):
+        self.__get_feed_dict_fn = lambda inputs, outputs: {model_input: inputs, model_output: outputs}
 
-        # Add summaries to items to evaluate
-        all_summaries = tf.summary.merge_all()
+    def set_optimizer(self, optimizer: tf.train.Optimizer):
+        self.set_train_evaluations([optimizer])
 
-        update_loop_fn(session, step, train_writer, test_writer, all_summaries)
+    def set_train_evaluations(self, train_evaluations: List[Any]):
+        self.__train_evaluations = train_evaluations
+        self.__train_step_fn = self.__default_train_step
 
+    def set_test_evaluations(self, test_evaluations: List[tf.Tensor]):
+        self.__test_evaluations = test_evaluations
+        self.__test_step_fn = self.__default_test_step
 
-def run_with_update_step(
-        args,
-        name,
-        update_step_fn):
+    def set_test_callback(self, test_callback_fn: Callable[[Any], None]):
+        self.__test_callback_fn = test_callback_fn
 
-    """
-    Train a model with an update step called at each training iteration
-    :param args: 
-    :param name: 
-    :param update_step_fn: 
-    """
-    run_with_update_loop(
-        args,
-        name,
-        __get_default_update_loop(
-            args,
-            update_step_fn))
+    def set_train_step(self, train_step_fn):
+        self.__train_step_fn = train_step_fn
 
+    def set_test_step(self, test_step_fn):
+        self.__test_step_fn = test_step_fn
 
-def run_with_test_train_steps(
-        args,
-        name,
-        get_batch_fn,
-        testing_data,
-        train_step_fn,
-        test_step_fn):
-    """
-    Train a model and specify training and testing steps
-    :param args: the command line arguments specifying how to run
-    :param name: the name of the project
-    :param get_batch_fn: function to get a batch of data
-    :param testing_data: all available testing data
-    :param train_step_fn: the training step
-    :param test_step_fn: the testing step
-    """
+    def set_model_saver(self, _model_saver: model_saver.ModelSaver):
+        self.__model_saver = _model_saver
 
-    update_loop_fn = __get_default_update_loop(
-        args, __get_default_update_step(args, get_batch_fn, testing_data, train_step_fn, test_step_fn))
+    def run(self):
+        # Set up session
+        with tf.Session() as session:
+            tf.global_variables_initializer().run()
 
-    run_with_update_loop(
-        args,
-        name,
-        update_loop_fn)
+            if self.__model_saver is not None:
+                self.__model_saver.load(session)
 
+            # Add summaries for all trainable variables
+            if self.__add_all_summaries:
+                tf_utils.add_all_trainable_summaries()
 
-def get_default_train_step(
-        model_input,
-        model_output,
-        evaluations):
+            # Set up writers
+            self.__train_writer, self.__test_writer = self.get_writers(session, self.__name, self.__run_tag)
 
-    def train_step(session, step, training_input, training_output, summary_writer, all_summaries):
+            self.__all_steps_fn(session)
+
+    def __default_all_steps(self, session: tf.Session):
+        assert self.__step_fn is not None
+
+        for step in itertools.count():
+            self.__step_fn(session, step)
+
+            if self.__training_steps is not None and step > self.__training_steps:
+                break
+
+    def __default_step(self, session: tf.Session, step: int):
+        assert self.__get_batch_fn is not None
+        assert self.__train_step_fn is not None
+        assert self.__test_data is not None
+        assert self.__test_step_fn is not None
+
+        summaries = tf.summary.merge_all()
+
+        train_batch = self.__get_batch_fn(self.__batch_size)
+        self.__train_step_fn(session, step, train_batch, summaries, self.__train_writer)
+
+        if step % self.__testing_step == 0:
+            test_cost = self.__test_step_fn(session, step, self.__test_data, summaries, self.__test_writer)
+
+            if self.__model_saver is not None:
+                self.__model_saver.save(session, test_cost)
+
+    def __default_train_step(
+            self,
+            session: tf.Session,
+            step: int,
+            batch: BatchType,
+            summaries: tf.Tensor,
+            summary_writer: tf.summary.FileWriter):
+
+        assert self.__train_evaluations is not None
+
         # Run training
         train_results = session.run(
-            evaluations + [all_summaries],
-            __get_feed_dict(model_input, model_output, training_input, training_output))
+            self.__train_evaluations + [summaries],
+            self.__get_feed_dict_fn(batch))
 
         # Add training summaries to writer if any exist
-        if all_summaries is not None:
-            summary_writer.add_summary(train_results[-1], step)
+        if summaries is not None:
+            train_results, summaries_result = train_results
+            summary_writer.add_summary(summaries_result, step)
 
-    return train_step
+    def __default_test_step(
+            self,
+            session: tf.Session,
+            step: int,
+            batch: BatchType,
+            summaries: tf.Tensor,
+            summary_writer: tf.summary.FileWriter):
 
-
-def get_default_test_step(
-        model_input,
-        model_output,
-        evaluations,
-        test_callback):
-
-    def test_step(session, step, testing_input, testing_output, summary_writer, all_summaries):
-        # Run model with test data
-        test_results = session.run(
-            evaluations + [all_summaries],
-            __get_feed_dict(model_input, model_output, testing_input, testing_output))
+        # Run testing
+        cost_result, *test_results = session.run(
+            self.__test_evaluations + [summaries],
+            self.__get_feed_dict_fn(batch))
 
         # Add testing summaries to writer if any exist
-        if all_summaries is not None:
-            summary_writer.add_summary(test_results[-1], step)
+        if summaries is not None:
+            *test_results, summaries_result = test_results
+            summary_writer.add_summary(summaries_result, step)
 
-        # Call the test callback if it exists
-        if test_callback is not None:
-            test_callback(*test_results, session)
+        if self.__test_callback_fn is not None:
+            self.__test_callback_fn(test_results)
 
-    return test_step
+        return cost_result
 
+    @staticmethod
+    def get_writers(
+            session: tf.Session,
+            name: str,
+            run_tag: Optional[str] = None) -> Tuple[tf.summary.FileWriter, tf.summary.FileWriter]:
+        """
+        Get the test and train writers for writing summaries
+        :param session: the session being used
+        :param name: the name of the program
+        :param run_tag: the tag of the run to be placed in the writer path
+        :return: a tuple where item 1 is the train writer, and item 2 is the test writer
+        """
 
-def __get_default_update_loop(
-        args,
-        update_step_fn):
+        if run_tag is not None:
+            name = "%s/%s" % (name, run_tag)
 
-    def update_loop(session, step, train_writer, test_writer, all_summaries):
-        while True:
-            update_step_fn(session, step, train_writer, test_writer, all_summaries)
+        time_formatted = datetime.now().strftime("%Y%m%d-%H%M%S")
+        train_writer = tf.summary.FileWriter("/tmp/%s/%s/train" % (name, time_formatted), session.graph)
+        test_writer = tf.summary.FileWriter("/tmp/%s/%s/test" % (name, time_formatted), session.graph)
 
-            # Check if we've run out of steps (never run out of steps if limit is negative)
-            if 0 <= args.training_steps < step:
-                break
-            else:
-                step += 1
+        return train_writer, test_writer
 
-    return update_loop
+    @staticmethod
+    def add_arguments(parser):
+        parser.add_argument("--training_steps", type=int, default=None)
+        parser.add_argument("--testing_step", type=int, default=1000)
+        parser.add_argument("--batch_size", type=int, default=256)
+        parser.add_argument("--add_all_summaries", type=bool, default=False)
+        parser.add_argument("--run_tag", type=bool, default=None)
 
-
-def __get_default_update_step(
-        args,
-        get_batch_fn,
-        testing_data,
-        train_step_fn,
-        test_step_fn):
-
-    def update_step(session, step, train_writer, test_writer, all_summaries):
-        training_input, training_output = get_batch_fn(args.batch_size)
-        train_step_fn(session, step, training_input, training_output, train_writer, all_summaries)
-
-        # If we're on a testing step...
-        if testing_data is not None and step % args.testing_step == 0:
-            testing_input, testing_output = testing_data
-            test_step_fn(session, step, testing_input, testing_output, test_writer, all_summaries)
-
-    return update_step
-
-
-def __get_feed_dict(model_input, model_output, batch_input, batch_output):
-    if model_output is not None:
-        return {
-            model_input: batch_input,
-            model_output: batch_output
-        }
-    else:
-        return {
-            model_input: batch_input
-        }
-
-
-def get_writers(
-        session: tf.Session,
-        name: str,
-        run_tag: Optional[str]=None) -> Tuple[tf.summary.FileWriter, tf.summary.FileWriter]:
-    """
-    Get the test and train writers for writing summaries
-    :param session: the session being used
-    :param name: the name of the program
-    :param run_tag: the tag of the run to be placed in the writer path
-    :return: a tuple where item 1 is the train writer, and item 2 is the test writer
-    """
-
-    if run_tag is not None:
-        name = "%s/%s" % (name, run_tag)
-
-    time_formatted = datetime.now().strftime("%Y%m%d-%H%M%S")
-    train_writer = tf.summary.FileWriter("/tmp/%s/%s/train" % (name, time_formatted), session.graph)
-    test_writer = tf.summary.FileWriter("/tmp/%s/%s/test" % (name, time_formatted), session.graph)
-
-    return train_writer, test_writer
+    @classmethod
+    def from_args(cls, args, name: str):
+        return GenericRunner(
+            name, args.training_steps, args.testing_step, args.batch_size, args.add_all_summaries, args.run_tag)
