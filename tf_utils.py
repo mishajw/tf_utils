@@ -20,14 +20,19 @@ def create_generation_comparison_images(input_image, output_image, guess_image):
     return all_images
 
 
-def tensor_summary(t):
+def tensor_summary(t: tf.Tensor, tag: Optional[str]=None):
+    if tag is None:
+        collections = []
+    else:
+        collections = [tag]
+
     t_mean = tf.reduce_mean(t)
     t_stddev = tf.sqrt(tf.reduce_mean(tf.square(tf.subtract(t, t_mean))))
 
-    tf.summary.scalar("mean", t_mean)
-    tf.summary.scalar("stddev", t_stddev)
-    tf.summary.scalar("max", tf.reduce_max(t))
-    tf.summary.scalar("min", tf.reduce_min(t))
+    tf.summary.scalar("mean", t_mean, collections)
+    tf.summary.scalar("stddev", t_stddev, collections)
+    tf.summary.scalar("max", tf.reduce_max(t), collections)
+    tf.summary.scalar("min", tf.reduce_min(t), collections)
 
 
 def remove_nans(t):
@@ -55,7 +60,7 @@ def int_array_from_str(s: str):
 def add_all_trainable_summaries():
     for variable in tf.trainable_variables():
         with tf.variable_scope(variable.name.replace(":", "_")):
-            tensor_summary(variable)
+            tensor_summary(variable, "all_trainable")
 
 
 def resize_tensor_array(tensor_array: tf.TensorArray, new_size: int) -> tf.TensorArray:
