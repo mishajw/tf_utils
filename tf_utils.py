@@ -82,21 +82,27 @@ def get_fully_connected_layers(
         initial_input: tf.Tensor,
         layer_sizes: List[int],
         activation_fn: Callable[[tf.Tensor], tf.Tensor],
-        dropout: Optional[float]=None) -> tf.Tensor:
+        dropout: Optional[float]=None,
+        batch_norm: bool=False,
+        is_training: bool=None) -> tf.Tensor:
     current_input = initial_input
 
     for i, layer_size in enumerate(layer_sizes):
         current_activation_fn = activation_fn if i != len(layer_sizes) - 1 else None
 
         with tf.variable_scope("fully_connected_layer%d" % i):
-            weights = try_create_scoped_variable("weights", shape=[current_input.shape[1], layer_size], dtype=tf.float32)
+            weights = try_create_scoped_variable(
+                "weights", shape=[current_input.shape[1], layer_size], dtype=tf.float32)
             biases = try_create_scoped_variable("biases", shape=[layer_size], dtype=tf.float32)
-            logits = tf.add(tf.matmul(current_input, weights), biases)
+            current_input = tf.add(tf.matmul(current_input, weights), biases)
+
+            if batch_norm:
+                assert is_training is not None
+                with tf.variable_scope("batch_norm"):
+                    current_input = tf.contrib.layers.batch_norm(current_input, is_training=is_training)
 
             if current_activation_fn is not None:
-                current_input = current_activation_fn(logits)
-            else:
-                current_input = logits
+                current_input = current_activation_fn(current_input)
 
             if dropout is not None:
                 current_input = tf.nn.dropout(current_input, keep_prob=dropout)
