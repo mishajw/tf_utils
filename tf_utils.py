@@ -113,3 +113,14 @@ def get_fully_connected_layers(
                 current_input = tf.nn.dropout(current_input, keep_prob=dropout)
 
     return current_input
+
+
+def get_rms_error(a: tf.Tensor, b: tf.Tensor) -> tf.Tensor:
+    """
+    Get the root mean squared difference of two tensors
+    :param a: the first tensor to compare
+    :param b: the second tensor to compare
+    :return: a tensor of shape () that is the RMS between two tensors
+    """
+    with tf.control_dependencies([tf.assert_equal(tf.shape(a), tf.shape(b))]):
+        return tf.sqrt(tf.reduce_mean(tf.squared_difference(a, b)))
