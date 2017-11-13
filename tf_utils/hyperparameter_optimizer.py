@@ -15,10 +15,12 @@ class OptimizableParameter(Generic[ParameterType]):
             command_line_name: str,
             short_name: Optional[str],
             skopt_dimension: Any,
+            default_value: ParameterType,
             value_to_string: Callable[[ParameterType], str] = str):
         self.command_line_name = command_line_name
         self.short_name = short_name
         self.skopt_dimension = skopt_dimension
+        self.default_value = default_value
         self.value_to_string_fn = value_to_string
 
         if self.short_name is None:
@@ -34,11 +36,11 @@ class OptimizableParameter(Generic[ParameterType]):
 
     @classmethod
     def int_type(cls, command_line_name: str, short_name: Optional[str], min_value: int, max_value: int):
-        return OptimizableParameter(command_line_name, short_name, (min_value, max_value))
+        return OptimizableParameter(command_line_name, short_name, (min_value, max_value), (max_value + min_value) / 2)
 
     @classmethod
     def float_type(cls, command_line_name: str, short_name: Optional[str], min_value: float, max_value: float):
-        return OptimizableParameter(command_line_name, short_name, (min_value, max_value))
+        return OptimizableParameter(command_line_name, short_name, (min_value, max_value), (max_value + min_value) / 2)
 
     @classmethod
     def int_power_type(
@@ -52,11 +54,12 @@ class OptimizableParameter(Generic[ParameterType]):
         max_pow = int(math.log(max_value, base))
         possible_values_str = [str(int(pow(base, p))) for p in range(min_pow, max_pow + 1)]
 
-        return OptimizableParameter(command_line_name, short_name, possible_values_str)
+        return OptimizableParameter(
+            command_line_name, short_name, possible_values_str, possible_values_str[int(len(possible_values_str) / 2)])
 
     @classmethod
     def bool_type(cls, command_line_name: str, short_name: Optional[str]):
-        return OptimizableParameter(command_line_name, short_name, ["true", "false"])
+        return OptimizableParameter(command_line_name, short_name, ["true", "false"], "true")
 
     @staticmethod
     def bind_with_parameters(optimizable_parameters: List["OptimizableParameter"], parameters: List[Any]):
@@ -77,14 +80,11 @@ class OptimizableParameter(Generic[ParameterType]):
 
 def create_function(base_command: List[str], optimizable_parameters: List[OptimizableParameter], log_directory: str):
     def run_with_parameters(parameters):
-        print("starting")
+        print("Starting job")
         last_output = None
 
         run_tag = OptimizableParameter.get_full_run_tag(optimizable_parameters, parameters)
         with open(os.path.join(log_directory, run_tag), "w") as process_log_file:
-            print(subprocess.check_output(["pwd"]))
-            print(subprocess.check_output(["ls"]))
-
             process = subprocess.Popen(
                 base_command +
                 OptimizableParameter.bind_with_parameters(optimizable_parameters, parameters) +
@@ -92,18 +92,14 @@ def create_function(base_command: List[str], optimizable_parameters: List[Optimi
                 stdout=subprocess.PIPE)
 
             # Read stdout from the process
-            # while True:
             for process_output in io.TextIOWrapper(process.stdout):
-                # process_output = process.stdout.readline().decode()
-                #
-                # if process_output == "":
-                #     break
-
                 # Write the logs to a file
                 process_log_file.write(process_output)
 
                 # Store the last output for cost parsing
                 last_output = process_output
+
+        print("Finished job")
 
         try:
             return float(last_output)
@@ -129,4 +125,7 @@ def run(
         run_with_parameters,
         dimensions=[optimizable.skopt_dimension for optimizable in optimizable_parameters],
         acq_optimizer="lbfgs",
-        n_jobs=num_concurrent)
+        n_jobs=num_concurrent,
+        n_random_starts=0,
+        x0=[p.default_value for p in optimizable_parameters],
+        verbose=100)
