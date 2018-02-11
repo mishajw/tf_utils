@@ -168,7 +168,7 @@ class GenericRunner(Generic[BatchType]):
             summary_writer.add_summary(summaries_result, step)
 
         if self.__test_callback_fn is not None:
-            self.__test_callback_fn(test_results)
+            self.__test_callback_fn([cost_result] + test_results)
 
         return cost_result
 
